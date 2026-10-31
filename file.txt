@@ -27,3 +27,10 @@ Match the style of terms.html.
 4. Make sure the appearance looks like the website's theme
 
 git commit -m "landing: add privacy policy page and route"
+
+
+Modify only the hero section in @templates/landing.html and @static/css/landing.css to match this image exactly. 
+Do not touch any other part of the page.
+
+git commit -m "landing: redesign hero section to match mockup"
+
