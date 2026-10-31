@@ -49,3 +49,8 @@ Requirements:
 - Do not modify any other part of the page.
 
 git commit -m "landing: add youtube modal on see how it works click"
+
+
+
+Read .claude/specs/01_database_setup.md and the existing database/db.py and app.py, then generate an implementation plan. 
+Save this plan to .claude/plans/01_database_setup.md
