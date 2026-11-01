@@ -75,7 +75,7 @@ def test_summary_stat_cards(client):
     html = profile_html(client)
     for label in ("Total spent", "Transactions", "Top category"):
         assert f'class="profile-stat-label">{label}</p>' in html
-    assert re.search(r'profile-top-category">Food</p>', html)
+    assert re.search(r'profile-top-category">Bills</p>', html)
 
 
 def test_transactions_table(client):
@@ -84,7 +84,7 @@ def test_transactions_table(client):
         assert f"<th>{header}</th>" in html
     assert '<th class="profile-num">Amount</th>' in html
     assert "profile-pill" in html
-    assert re.search(r'<td class="profile-num profile-amount">₹1240\.00</td>', html)
+    assert re.search(r'<td class="profile-num profile-amount">₹32\.40</td>', html)
     # Every rupee amount has exactly two decimals.
     for match in re.finditer(r"₹([\d.]+)", html):
         assert re.fullmatch(r"\d+\.\d{2}", match.group(1))
@@ -107,7 +107,7 @@ def test_total_equals_sum_of_categories(client):
     html = profile_html(client)
     amounts = [float(a) for a in re.findall(r'profile-cat-amount">₹([\d.]+)<', html)]
     total = float(re.search(r'profile-total-spent">₹([\d.]+)<', html).group(1))
-    assert round(sum(amounts), 2) == total == 12650.00
+    assert round(sum(amounts), 2) == total == 222.19
 
 
 def test_add_expense_link(client):
@@ -193,3 +193,123 @@ def test_lucide_loaded_pinned_and_initialised():
     assert lucide_pos < base.find("js/main.js")
     assert "if (window.lucide)" in js
     assert "lucide.createIcons()" in js
+
+
+# ------------------------------------------------------------------ #
+# Step 5 — real DB data                                               #
+# ------------------------------------------------------------------ #
+
+def register_and_login(client, email="new@example.com", name="New User"):
+    client.post(
+        "/register",
+        data={"name": name, "email": email, "password": "password123"},
+    )
+    login(client, email, "password123")
+
+
+def test_missing_user_clears_session_and_redirects(client):
+    with client.session_transaction() as sess:
+        sess["user_id"] = 9999
+        sess["user_name"] = "Ghost"
+    res = client.get("/profile")
+    assert res.status_code == 302
+    assert res.headers["Location"].endswith("/login")
+    with client.session_transaction() as sess:
+        assert "user_id" not in sess
+
+
+def test_user_card_from_db(client):
+    html = profile_html(client)
+    assert "demo@spendly.com" in html
+    assert re.search(r"Member since [A-Z][a-z]+ \d{4}", html)
+
+
+def test_profile_data_isolated_between_users(client):
+    register_and_login(client)
+    res = client.get("/profile")
+    assert res.status_code == 200
+    html = res.data.decode()
+    assert "new@example.com" in html
+    assert "demo@spendly.com" not in html
+    assert "Groceries" not in html
+    assert 'profile-total-spent">₹0.00<' in html
+
+
+TX_AMOUNT = re.compile(r'<td class="profile-num profile-amount">₹([\d.]+)</td>')
+
+
+def test_transactions_from_db_newest_first(client):
+    html = profile_html(client)
+    amounts = TX_AMOUNT.findall(html)
+    assert len(amounts) == 8
+    assert amounts == [
+        "32.40", "7.25", "45.30", "15.99", "20.00", "85.00", "3.75", "12.50",
+    ]
+
+
+def test_transaction_date_formatted_from_db(client):
+    from datetime import date
+
+    html = profile_html(client)
+    first_row = re.search(r"<tbody>.*?</tr>", html, re.S).group(0)
+    assert date.today().strftime("%d %b %Y") in first_row
+
+
+def test_new_user_sees_no_transactions(client):
+    register_and_login(client)
+    html = client.get("/profile").data.decode()
+    assert "No transactions yet." in html
+    assert not TX_AMOUNT.search(html)
+
+
+def test_format_date_unit(app):
+    import importlib
+
+    format_date = importlib.import_module("app")._format_date
+    assert format_date("2026-01-05") == "05 Jan 2026"
+
+
+def test_stats_for_demo_user(client):
+    html = profile_html(client)
+    assert 'profile-total-spent">₹222.19<' in html
+    assert re.search(
+        r'profile-stat-label">Transactions</p>\s*<p class="profile-stat-value">8</p>',
+        html,
+    )
+    assert 'profile-top-category">Bills<' in html
+
+
+def test_stats_for_new_user_are_zero(client):
+    register_and_login(client, email="stats@example.com", name="Stats User")
+    res = client.get("/profile")
+    assert res.status_code == 200
+    html = res.data.decode()
+    assert 'profile-total-spent">₹0.00<' in html
+    assert re.search(
+        r'profile-stat-label">Transactions</p>\s*<p class="profile-stat-value">0</p>',
+        html,
+    )
+    assert 'profile-top-category">—<' in html
+
+
+def test_categories_from_db_ordered_and_aggregated(client):
+    html = profile_html(client)
+    names = re.findall(r'<li class="profile-cat profile-cat--(\w+)">', html)
+    assert len(names) == 7
+    assert names[:3] == ["bills", "shopping", "food"]
+    assert 'profile-cat-amount">₹44.90<' in html
+
+
+def test_categories_empty_state_for_new_user(client):
+    register_and_login(client)
+    html = client.get("/profile").data.decode()
+    assert "No spending yet." in html
+    assert "profile-cat-total" not in html
+
+
+def test_category_pcts_empty_and_zero_total(app):
+    import importlib
+
+    category_pcts = importlib.import_module("app")._category_pcts
+    assert category_pcts([]) == []
+    assert category_pcts([("Food", 0.0)]) == []
