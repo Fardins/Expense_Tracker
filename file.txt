@@ -60,3 +60,6 @@ Save this plan to .claude/plans/02_registration_setup.md
 
 Read .claude/specs/03-login-logout.md and create a detailed implementation plan for the same.
   Save this plan to .claude/plans/03_login-logout_setup.md
+
+Read .claude/specs/04-profile-page-design.md and .claude/skills/frontend-design/SKILL.md and 
+create a detailed implementation plan for the same and Save this plan to .claude/plans/04_frontend_design_setup.md

@@ -19,6 +19,29 @@ DUPLICATE_EMAIL_ERROR = "An account with that email already exists."
 LOGIN_REQUIRED_ERROR = "Email and password are required."
 INVALID_LOGIN_ERROR = "Invalid email or password."
 
+# Step 4 placeholder profile data — replaced by real DB queries in a later step.
+PLACEHOLDER_EMAIL = "demo@spendly.com"
+PLACEHOLDER_MEMBER_SINCE = "January 2026"
+PLACEHOLDER_TRANSACTION_COUNT = 18
+PLACEHOLDER_TRANSACTIONS = [
+    {"date": "31 Oct 2026", "description": "Weekly groceries", "category": "Food", "amount": 1240.00},
+    {"date": "29 Oct 2026", "description": "Electricity bill", "category": "Bills", "amount": 1850.00},
+    {"date": "27 Oct 2026", "description": "Metro card top-up", "category": "Transport", "amount": 500.00},
+    {"date": "24 Oct 2026", "description": "Pharmacy", "category": "Health", "amount": 420.00},
+    {"date": "21 Oct 2026", "description": "Movie tickets", "category": "Entertainment", "amount": 650.00},
+    {"date": "18 Oct 2026", "description": "Running shoes", "category": "Shopping", "amount": 1475.50},
+]
+# Sorted by amount, descending; sums to 12650.00.
+PLACEHOLDER_CATEGORY_AMOUNTS = [
+    ("Food", 4250.00),
+    ("Bills", 3200.00),
+    ("Transport", 1850.00),
+    ("Shopping", 1475.50),
+    ("Health", 900.00),
+    ("Entertainment", 650.00),
+    ("Other", 324.50),
+]
+
 
 def _registration_error(name, email, password):
     """Return the first validation error message, or None if input is valid."""
@@ -100,6 +123,37 @@ def logout():
     return redirect(url_for("landing"))
 
 
+@app.route("/profile")
+def profile():
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    name = session.get("user_name", "")
+    total = sum(amount for _, amount in PLACEHOLDER_CATEGORY_AMOUNTS)
+    categories = [
+        {"name": cat, "amount": amount, "pct": round(amount / total * 100, 1)}
+        for cat, amount in PLACEHOLDER_CATEGORY_AMOUNTS
+    ]
+    user = {
+        "name": name,
+        "initial": name[:1].upper() or "?",
+        "email": PLACEHOLDER_EMAIL,
+        "member_since": PLACEHOLDER_MEMBER_SINCE,
+    }
+    stats = {
+        "total_spent": total,
+        "transaction_count": PLACEHOLDER_TRANSACTION_COUNT,
+        "top_category": categories[0]["name"],
+    }
+    return render_template(
+        "profile.html",
+        user=user,
+        stats=stats,
+        transactions=PLACEHOLDER_TRANSACTIONS,
+        categories=categories,
+    )
+
+
 @app.route("/terms")
 def terms():
     return render_template("terms.html")
@@ -113,11 +167,6 @@ def privacy():
 # ------------------------------------------------------------------ #
 # Placeholder routes — students will implement these                  #
 # ------------------------------------------------------------------ #
-
-@app.route("/profile")
-def profile():
-    return "Profile page — coming in Step 4"
-
 
 @app.route("/expenses/add")
 def add_expense():
