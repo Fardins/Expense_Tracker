@@ -33,7 +33,7 @@
             <div class="profile-stat">
                 <span class="profile-stat-icon"><i data-lucide="tag" aria-hidden="true"></i></span>
                 <p class="profile-stat-label">Top category</p>
-                <p class="profile-stat-value profile-top-category">{{ stats.top_category }}</p>
+                <p class="profile-stat-value profile-top-category">{{ stats.top_category or "—" }}</p>
             </div>
         </section>
 
@@ -70,6 +70,7 @@
 
             <section class="profile-card profile-categories">
                 <h2 class="profile-card-title"><i data-lucide="pie-chart" aria-hidden="true"></i> Spending by category</h2>
+                {% if categories %}
                 <ul class="profile-cat-list">
                     {% for c in categories %}
                     <li class="profile-cat profile-cat--{{ c.name|lower }}">
@@ -85,6 +86,9 @@
                     {% endfor %}
                 </ul>
                 <p class="profile-cat-total">Total <span class="profile-amount">₹{{ "%.2f"|format(stats.total_spent) }}</span></p>
+                {% else %}
+                <p class="profile-empty">No spending yet.</p>
+                {% endif %}
             </section>
         </div>
 

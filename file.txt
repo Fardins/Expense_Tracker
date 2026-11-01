@@ -63,3 +63,12 @@ Read .claude/specs/03-login-logout.md and create a detailed implementation plan 
 
 Read .claude/specs/04-profile-page-design.md and .claude/skills/frontend-design/SKILL.md and 
 create a detailed implementation plan for the same and Save this plan to .claude/plans/04_frontend_design_setup.md
+
+
+
+Read .claude/specs/05-backend-routes-profile-page.md and come up with an implementation plan for adding the backend routes.
+While implementing the plan into code, split the work across 3 parallel subagents:
+ - Subagent 1: Implement the transaction history routes 
+ - Subagent 2: implement the summary stats routes
+ - Subagent3: Implement the category breakdown routes Each subagent should only modify its assigned section in app.py
+Save this plan to .claude/plans/05-backend-routes-profile-page_setup.md

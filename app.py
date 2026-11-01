@@ -1,10 +1,21 @@
 import os
 import sqlite3
+from datetime import datetime
 
 from flask import Flask, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
-from database.db import create_user, get_db, get_user_by_email, init_db, seed_db
+from database.db import (
+    create_user,
+    get_category_totals,
+    get_db,
+    get_expense_summary,
+    get_recent_expenses,
+    get_user_by_email,
+    get_user_by_id,
+    init_db,
+    seed_db,
+)
 
 app = Flask(__name__)
 # Dev-only fallback — set SECRET_KEY in the environment for any real deployment.
@@ -19,29 +30,6 @@ DUPLICATE_EMAIL_ERROR = "An account with that email already exists."
 LOGIN_REQUIRED_ERROR = "Email and password are required."
 INVALID_LOGIN_ERROR = "Invalid email or password."
 
-# Step 4 placeholder profile data — replaced by real DB queries in a later step.
-PLACEHOLDER_EMAIL = "demo@spendly.com"
-PLACEHOLDER_MEMBER_SINCE = "January 2026"
-PLACEHOLDER_TRANSACTION_COUNT = 18
-PLACEHOLDER_TRANSACTIONS = [
-    {"date": "31 Oct 2026", "description": "Weekly groceries", "category": "Food", "amount": 1240.00},
-    {"date": "29 Oct 2026", "description": "Electricity bill", "category": "Bills", "amount": 1850.00},
-    {"date": "27 Oct 2026", "description": "Metro card top-up", "category": "Transport", "amount": 500.00},
-    {"date": "24 Oct 2026", "description": "Pharmacy", "category": "Health", "amount": 420.00},
-    {"date": "21 Oct 2026", "description": "Movie tickets", "category": "Entertainment", "amount": 650.00},
-    {"date": "18 Oct 2026", "description": "Running shoes", "category": "Shopping", "amount": 1475.50},
-]
-# Sorted by amount, descending; sums to 12650.00.
-PLACEHOLDER_CATEGORY_AMOUNTS = [
-    ("Food", 4250.00),
-    ("Bills", 3200.00),
-    ("Transport", 1850.00),
-    ("Shopping", 1475.50),
-    ("Health", 900.00),
-    ("Entertainment", 650.00),
-    ("Other", 324.50),
-]
-
 
 def _registration_error(name, email, password):
     """Return the first validation error message, or None if input is valid."""
@@ -53,6 +41,75 @@ def _registration_error(name, email, password):
     if len(password) < 8:
         return "Password must be at least 8 characters."
     return None
+
+
+def _format_month(created_at):
+    """'YYYY-MM-DD HH:MM:SS' -> 'Month YYYY' ('' if missing)."""
+    if not created_at:
+        return ""
+    return datetime.strptime(created_at[:10], "%Y-%m-%d").strftime("%B %Y")
+
+
+def _build_user(row):
+    """Shape a users row into the profile card context."""
+    name = row["name"]
+    return {
+        "name": name,
+        "initial": name[:1].upper() or "?",
+        "email": row["email"],
+        "member_since": _format_month(row["created_at"]),
+    }
+
+
+def _format_date(iso):
+    """'YYYY-MM-DD' -> 'DD Mon YYYY'."""
+    return datetime.strptime(iso, "%Y-%m-%d").strftime("%d %b %Y")
+
+
+def _build_transactions(user_id):
+    """-> [{'date': 'DD Mon YYYY', 'description': str, 'category': str, 'amount': float}]"""
+    return [
+        {
+            "date": _format_date(row["date"]),
+            "description": row["description"] or "",
+            "category": row["category"],
+            "amount": float(row["amount"]),
+        }
+        for row in get_recent_expenses(user_id)
+    ]
+
+
+def _build_stats(user_id, categories):
+    """-> {'total_spent': float, 'transaction_count': int, 'top_category': str | None}
+
+    ``categories`` is _build_categories output: sorted by amount DESC, name ASC.
+    """
+    summary = get_expense_summary(user_id)
+    return {
+        "total_spent": round(summary["total"], 2),
+        "transaction_count": summary["count"],
+        "top_category": categories[0]["name"] if categories else None,
+    }
+
+
+def _category_pcts(rows):
+    """(category, amount) rows -> [{'name', 'amount', 'pct'}]; [] if total is 0."""
+    total = sum(row[1] for row in rows)
+    if not rows or total == 0:
+        return []
+    return [
+        {
+            "name": row[0],
+            "amount": round(row[1], 2),
+            "pct": round(row[1] / total * 100, 1),
+        }
+        for row in rows
+    ]
+
+
+def _build_categories(user_id):
+    """-> [{'name': str, 'amount': float, 'pct': float (1dp)}], [] when no spend."""
+    return _category_pcts(get_category_totals(user_id))
 
 
 # ------------------------------------------------------------------ #
@@ -125,31 +182,21 @@ def logout():
 
 @app.route("/profile")
 def profile():
-    if not session.get("user_id"):
+    user_id = session.get("user_id")
+    if not user_id:
         return redirect(url_for("login"))
 
-    name = session.get("user_name", "")
-    total = sum(amount for _, amount in PLACEHOLDER_CATEGORY_AMOUNTS)
-    categories = [
-        {"name": cat, "amount": amount, "pct": round(amount / total * 100, 1)}
-        for cat, amount in PLACEHOLDER_CATEGORY_AMOUNTS
-    ]
-    user = {
-        "name": name,
-        "initial": name[:1].upper() or "?",
-        "email": PLACEHOLDER_EMAIL,
-        "member_since": PLACEHOLDER_MEMBER_SINCE,
-    }
-    stats = {
-        "total_spent": total,
-        "transaction_count": PLACEHOLDER_TRANSACTION_COUNT,
-        "top_category": categories[0]["name"],
-    }
+    row = get_user_by_id(user_id)
+    if row is None:  # stale session pointing at a deleted user
+        session.clear()
+        return redirect(url_for("login"))
+
+    categories = _build_categories(user_id)
     return render_template(
         "profile.html",
-        user=user,
-        stats=stats,
-        transactions=PLACEHOLDER_TRANSACTIONS,
+        user=_build_user(row),
+        stats=_build_stats(user_id, categories),
+        transactions=_build_transactions(user_id),
         categories=categories,
     )
 
