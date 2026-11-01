@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Profile — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="profile">
+    <div class="profile-inner">
+
+        <header class="profile-card profile-user">
+            <div class="profile-avatar" aria-hidden="true">{{ user.initial }}</div>
+            <div class="profile-user-info">
+                <h1 class="profile-name">{{ user.name }}</h1>
+                <p class="profile-meta"><i data-lucide="mail" aria-hidden="true"></i> {{ user.email }}</p>
+                <p class="profile-meta"><i data-lucide="calendar" aria-hidden="true"></i> Member since {{ user.member_since }}</p>
+            </div>
+        </header>
+
+        <section class="profile-stats" aria-label="Summary">
+            <div class="profile-stat">
+                <span class="profile-stat-icon"><i data-lucide="wallet" aria-hidden="true"></i></span>
+                <p class="profile-stat-label">Total spent</p>
+                <p class="profile-stat-value profile-total-spent">₹{{ "%.2f"|format(stats.total_spent) }}</p>
+            </div>
+            <div class="profile-stat">
+                <span class="profile-stat-icon"><i data-lucide="receipt" aria-hidden="true"></i></span>
+                <p class="profile-stat-label">Transactions</p>
+                <p class="profile-stat-value">{{ stats.transaction_count }}</p>
+            </div>
+            <div class="profile-stat">
+                <span class="profile-stat-icon"><i data-lucide="tag" aria-hidden="true"></i></span>
+                <p class="profile-stat-label">Top category</p>
+                <p class="profile-stat-value profile-top-category">{{ stats.top_category }}</p>
+            </div>
+        </section>
+
+        <div class="profile-grid">
+            <section class="profile-card profile-transactions">
+                <h2 class="profile-card-title"><i data-lucide="receipt" aria-hidden="true"></i> Recent transactions</h2>
+                {% if transactions %}
+                <div class="profile-table-wrap">
+                    <table class="profile-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th>Category</th>
+                                <th class="profile-num">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in transactions %}
+                            <tr>
+                                <td class="profile-date">{{ t.date }}</td>
+                                <td>{{ t.description }}</td>
+                                <td><span class="profile-pill profile-cat--{{ t.category|lower }}">{{ t.category }}</span></td>
+                                <td class="profile-num profile-amount">₹{{ "%.2f"|format(t.amount) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="profile-empty">No transactions yet.</p>
+                {% endif %}
+            </section>
+
+            <section class="profile-card profile-categories">
+                <h2 class="profile-card-title"><i data-lucide="pie-chart" aria-hidden="true"></i> Spending by category</h2>
+                <ul class="profile-cat-list">
+                    {% for c in categories %}
+                    <li class="profile-cat profile-cat--{{ c.name|lower }}">
+                        <div class="profile-cat-head">
+                            <span class="profile-cat-name"><span class="profile-cat-dot" aria-hidden="true"></span>{{ c.name }}</span>
+                            <span class="profile-cat-amount">₹{{ "%.2f"|format(c.amount) }}</span>
+                        </div>
+                        <div class="profile-bar-track">
+                            <div class="profile-bar-fill" style="width: {{ c.pct }}%"></div>
+                        </div>
+                        <span class="profile-cat-pct">{{ c.pct }}%</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <p class="profile-cat-total">Total <span class="profile-amount">₹{{ "%.2f"|format(stats.total_spent) }}</span></p>
+            </section>
+        </div>
+
+        <div class="profile-actions">
+            <a href="{{ url_for('add_expense') }}" class="btn-primary profile-add-btn"><i data-lucide="plus" aria-hidden="true"></i> Add expense</a>
+        </div>
+
+    </div>
+</section>
+{% endblock %}

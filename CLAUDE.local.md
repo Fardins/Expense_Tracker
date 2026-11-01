@@ -18,7 +18,8 @@ spendly/
 ├── static/
 │   ├── css/
 │   │   ├── style.css       # Global styles
-│   │   └── landing.css     # Landing-page-only styles
+│   │   ├── landing.css     # Landing-page-only styles
+│   │   └── profile.css     # Profile-page-only styles
 │   └── js/
 │       └── main.js         # Vanilla JS only
 └── requirements.txt
@@ -96,7 +97,7 @@ pytest -s
 | `GET /register` | Implemented — renders `register.html` |
 | `GET/POST /login` | Implemented — Step 3 (session login) |
 | `GET /logout` | Implemented — Step 3 (clears session) |
-| `GET /profile` | Stub — Step 4 |
+| `GET /profile` | Implemented — Step 4 (placeholder data, login required) |
 | `GET /expenses/add` | Stub — Step 7 |
 | `GET /expenses/<id>/edit` | Stub — Step 8 |
 | `GET /expenses/<id>/delete` | Stub — Step 9 |
