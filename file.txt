@@ -57,3 +57,6 @@ Save this plan to .claude/plans/01_database_setup.md
 
 Read .claude/specs/02-registration.md and create a detailed implementation plan for the same. 
 Save this plan to .claude/plans/02_registration_setup.md
+
+Read .claude/specs/03-login-logout.md and create a detailed implementation plan for the same.
+  Save this plan to .claude/plans/03_login-logout_setup.md
