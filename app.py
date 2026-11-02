@@ -1,3 +1,4 @@
+import math
 import os
 import sqlite3
 from datetime import date, datetime, timedelta
@@ -6,6 +7,8 @@ from flask import Flask, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
 from database.db import (
+    CATEGORIES,
+    create_expense,
     create_user,
     get_category_totals,
     get_db,
@@ -20,6 +23,13 @@ from database.db import (
 app = Flask(__name__)
 # Dev-only fallback — set SECRET_KEY in the environment for any real deployment.
 app.secret_key = os.environ.get("SECRET_KEY") or "dev-only-insecure-secret-change-me"
+app.config.update(
+    # Cross-site POSTs don't carry the session cookie (CSRF mitigation; a
+    # per-form token is planned before the edit/delete steps).
+    SESSION_COOKIE_SAMESITE="Lax",
+    # Forms here are tiny; reject oversized bodies before they are parsed.
+    MAX_CONTENT_LENGTH=16 * 1024,
+)
 
 with app.app_context():
     init_db()
@@ -31,6 +41,17 @@ LOGIN_REQUIRED_ERROR = "Email and password are required."
 INVALID_LOGIN_ERROR = "Invalid email or password."
 INVALID_DATE_ERROR = "Invalid date — showing all time."
 DATE_ORDER_ERROR = "Start date must be on or before end date."
+AMOUNT_ERROR = "Enter an amount greater than 0."
+AMOUNT_TOO_LARGE_ERROR = "Amount is too large."
+CATEGORY_ERROR = "Choose a valid category."
+EXPENSE_DATE_ERROR = "Enter a valid date."
+FUTURE_DATE_ERROR = "Date cannot be in the future."
+DESCRIPTION_LENGTH_ERROR = "Description must be 200 characters or fewer."
+
+# Expense form limits
+MAX_AMOUNT = 1_000_000
+MAX_DESCRIPTION = 200
+EXPENSE_FIELDS = ("amount", "category", "date", "description")
 
 
 def _registration_error(name, email, password):
@@ -89,6 +110,100 @@ def _parse_date_filter(args):
     if date_from and date_to and date_from > date_to:
         return {"date_from": None, "date_to": None, "error": DATE_ORDER_ERROR}
     return {"date_from": date_from, "date_to": date_to, "error": None}
+
+
+def _parse_amount(raw):
+    """Amount string -> (float rounded to 2dp, None) or (None, error).
+
+    float() also accepts forms like '1e2' and '1_0'; that's fine because the
+    range checks below still apply. round() passes nan/inf through unchanged,
+    so the isfinite() check after it is safe. Rounding happens first so that
+    e.g. '0.001' is rejected rather than stored as 0.00.
+    """
+    try:
+        amount = round(float(raw), 2)
+    except ValueError:
+        return None, AMOUNT_ERROR
+    if not math.isfinite(amount) or amount <= 0:
+        return None, AMOUNT_ERROR
+    if amount > MAX_AMOUNT:
+        return None, AMOUNT_TOO_LARGE_ERROR
+    return amount, None
+
+
+def _parse_expense_form(form, today):
+    """Form mapping -> (values, None) or (None, error). No SQL; first error wins.
+
+    ``values`` is {'amount', 'category', 'date', 'description'} ready for
+    create_expense(); ``today`` is a date, passed in so tests can control it.
+    """
+    amount, error = _parse_amount((form.get("amount") or "").strip())
+    if error:
+        return None, error
+
+    category = form.get("category") or ""  # exact match, never stripped
+    if category not in CATEGORIES:
+        return None, CATEGORY_ERROR
+
+    # _parse_iso_date returns None for a blank value and raises ValueError for
+    # a malformed one; both mean "no valid date" here.
+    try:
+        expense_date = _parse_iso_date(form.get("date"))
+    except ValueError:
+        expense_date = None
+    if expense_date is None:
+        return None, EXPENSE_DATE_ERROR
+    # Both sides are normalised 'YYYY-MM-DD', so string order == date order.
+    if expense_date > today.isoformat():
+        return None, FUTURE_DATE_ERROR
+
+    description = (form.get("description") or "").strip()
+    if len(description) > MAX_DESCRIPTION:
+        return None, DESCRIPTION_LENGTH_ERROR
+
+    return {
+        "amount": amount,
+        "category": category,
+        "date": expense_date,
+        "description": description or None,
+    }, None
+
+
+def _default_expense_values(today):
+    """Initial form values for a new expense: today's date, first category."""
+    return {
+        "amount": "",
+        "category": CATEGORIES[0],
+        "date": today.isoformat(),
+        "description": "",
+    }
+
+
+def _expense_form_values(form):
+    """Submitted strings, stripped, for re-rendering the form (sticky values)."""
+    return {field: (form.get(field) or "").strip() for field in EXPENSE_FIELDS}
+
+
+def _session_user():
+    """Logged-in users row, or None. Clears a session whose user is gone."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+    row = get_user_by_id(user_id)
+    if row is None:
+        session.clear()
+    return row
+
+
+def _render_add_expense(form_values, today, error=None):
+    """Render the add-expense form with the given values and optional error."""
+    return render_template(
+        "add_expense.html",
+        form_values=form_values,
+        categories=CATEGORIES,
+        today=today.isoformat(),
+        error=error,
+    )
 
 
 def _month_start(today, months_back):
@@ -276,14 +391,10 @@ def logout():
 
 @app.route("/profile")
 def profile():
-    user_id = session.get("user_id")
-    if not user_id:
+    row = _session_user()
+    if row is None:
         return redirect(url_for("login"))
-
-    row = get_user_by_id(user_id)
-    if row is None:  # stale session pointing at a deleted user
-        session.clear()
-        return redirect(url_for("login"))
+    user_id = row["id"]
 
     parsed = _parse_date_filter(request.args)
     date_range = {"date_from": parsed["date_from"], "date_to": parsed["date_to"]}
@@ -296,6 +407,24 @@ def profile():
         categories=categories,
         date_filter=_build_filter(parsed, date.today()),
     )
+
+
+@app.route("/expenses/add", methods=["GET", "POST"])
+def add_expense():
+    user = _session_user()
+    if user is None:
+        return redirect(url_for("login"))
+
+    today = date.today()
+    if request.method == "GET":
+        return _render_add_expense(_default_expense_values(today), today)
+
+    values, error = _parse_expense_form(request.form, today)
+    if error:
+        form_values = _expense_form_values(request.form)
+        return _render_add_expense(form_values, today, error), 400
+    create_expense(user["id"], **values)  # user_id comes from the session only
+    return redirect(url_for("profile"))
 
 
 @app.route("/terms")
@@ -311,11 +440,6 @@ def privacy():
 # ------------------------------------------------------------------ #
 # Placeholder routes — students will implement these                  #
 # ------------------------------------------------------------------ #
-
-@app.route("/expenses/add")
-def add_expense():
-    return "Add expense — coming in Step 7"
-
 
 @app.route("/expenses/<int:id>/edit")
 def edit_expense(id):

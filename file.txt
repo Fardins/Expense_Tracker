@@ -52,7 +52,7 @@ git commit -m "landing: add youtube modal on see how it works click"
 
 
 
-Read .claude/specs/01_database_setup.md and the existing database/db.py and app.py, then generate an implementation plan. 
+Read @.claude/specs/01_database_setup.md and the existing database/db.py and app.py, then generate an implementation plan. 
 Save this plan to .claude/plans/01_database_setup.md
 
 Read .claude/specs/02-registration.md and create a detailed implementation plan for the same. 
@@ -79,3 +79,10 @@ Invoke after implementing any feature to generate tests based on the feature spe
 
 Read .claude/specs/06-date-filter-for-profile-page.md and create a detailed implementation plan for that
 and Save this plan to .claude/plans/06_date-filter-for-profile-page_setup.md
+
+Read @.claude/specs/07-add_new_expenses.md then generate an implementation plan. 
+Save this plan to @.claude/plans/07_add_new_expenses_setup.md
+
+Commit all changes with an appropriate conventional commit message, push to the current feature branch, 
+create a pull request into main with a proper title and description based on the spec, 
+merge it using squash merge, switch to main, pull latest, and delete the feature branch locally.

@@ -131,6 +131,21 @@ def create_user(name, email, password):
         conn.close()
 
 
+def create_expense(user_id, amount, category, date, description=None):
+    """Insert one expense for ``user_id`` and return its id."""
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO expenses (user_id, amount, category, date, description) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (user_id, amount, category, date, description),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
 def get_user_by_id(user_id):
     """Return id, name, email, created_at for ``user_id``, or None.
 
