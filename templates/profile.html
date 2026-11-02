@@ -19,6 +19,33 @@
             </div>
         </header>
 
+        {% if date_filter %}
+        <section class="profile-card profile-filter" aria-label="Date filter">
+            <nav class="profile-filter-presets" aria-label="Date presets">
+                {% for p in date_filter.presets %}
+                {% set is_active = p.label == date_filter.active_preset %}
+                <a href="{{ url_for('profile', **p.params) }}" class="profile-filter-preset{% if is_active %} profile-filter-preset--active{% endif %}"{% if is_active %} aria-current="true"{% endif %}>{{ p.label }}</a>
+                {% endfor %}
+            </nav>
+            <form class="profile-filter-form" method="get" action="{{ url_for('profile') }}">
+                <div class="profile-filter-field">
+                    <label for="filter-from">From</label>
+                    <input class="form-input" type="date" id="filter-from" name="from" value="{{ date_filter.date_from or '' }}">
+                </div>
+                <div class="profile-filter-field">
+                    <label for="filter-to">To</label>
+                    <input class="form-input" type="date" id="filter-to" name="to" value="{{ date_filter.date_to or '' }}">
+                </div>
+                <div class="profile-filter-actions">
+                    <button type="submit" class="btn-primary">Apply</button>
+                    {% if date_filter.active %}<a href="{{ url_for('profile') }}" class="btn-ghost profile-filter-clear">Clear</a>{% endif %}
+                </div>
+            </form>
+            {% if date_filter.error %}<p class="profile-filter-error" role="alert">{{ date_filter.error }}</p>{% endif %}
+            <p class="profile-filter-caption"><i data-lucide="calendar" aria-hidden="true"></i> {{ date_filter.caption }}</p>
+        </section>
+        {% endif %}
+
         <section class="profile-stats" aria-label="Summary">
             <div class="profile-stat">
                 <span class="profile-stat-icon"><i data-lucide="wallet" aria-hidden="true"></i></span>
@@ -64,7 +91,7 @@
                     </table>
                 </div>
                 {% else %}
-                <p class="profile-empty">No transactions yet.</p>
+                <p class="profile-empty">{% if date_filter and date_filter.active %}No transactions in this period.{% else %}No transactions yet.{% endif %}</p>
                 {% endif %}
             </section>
 
@@ -87,7 +114,7 @@
                 </ul>
                 <p class="profile-cat-total">Total <span class="profile-amount">₹{{ "%.2f"|format(stats.total_spent) }}</span></p>
                 {% else %}
-                <p class="profile-empty">No spending yet.</p>
+                <p class="profile-empty">{% if date_filter and date_filter.active %}No spending in this period.{% else %}No spending yet.{% endif %}</p>
                 {% endif %}
             </section>
         </div>

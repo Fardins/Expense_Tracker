@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from flask import Flask, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
@@ -29,6 +29,8 @@ with app.app_context():
 DUPLICATE_EMAIL_ERROR = "An account with that email already exists."
 LOGIN_REQUIRED_ERROR = "Email and password are required."
 INVALID_LOGIN_ERROR = "Invalid email or password."
+INVALID_DATE_ERROR = "Invalid date — showing all time."
+DATE_ORDER_ERROR = "Start date must be on or before end date."
 
 
 def _registration_error(name, email, password):
@@ -66,8 +68,98 @@ def _format_date(iso):
     return datetime.strptime(iso, "%Y-%m-%d").strftime("%d %b %Y")
 
 
-def _build_transactions(user_id):
+def _parse_iso_date(value):
+    """'YYYY-MM-DD' -> normalised ISO str; blank -> None; ValueError if bad."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+
+
+def _parse_date_filter(args):
+    """request.args-like mapping -> {'date_from', 'date_to', 'error'}.
+
+    Any invalid value, or from > to, drops both bounds (all time) with an error.
+    """
+    try:
+        date_from = _parse_iso_date(args.get("from"))
+        date_to = _parse_iso_date(args.get("to"))
+    except ValueError:
+        return {"date_from": None, "date_to": None, "error": INVALID_DATE_ERROR}
+    if date_from and date_to and date_from > date_to:
+        return {"date_from": None, "date_to": None, "error": DATE_ORDER_ERROR}
+    return {"date_from": date_from, "date_to": date_to, "error": None}
+
+
+def _month_start(today, months_back):
+    """1st of the month ``months_back`` months before ``today``'s month."""
+    year, month0 = divmod(today.year * 12 + today.month - 1 - months_back, 12)
+    return date(year, month0 + 1, 1)
+
+
+def _preset(label, start=None, end=None):
+    """One preset: ISO bounds (None = unbounded) plus its url_for query params."""
+    params = {key: value for key, value in (("from", start), ("to", end)) if value}
+    return {"label": label, "from": start, "to": end, "params": params}
+
+
+def _date_presets(today):
+    """-> [{'label', 'from', 'to', 'params'}] for the filter bar."""
+    this_start = _month_start(today, 0)
+    last_month_end = this_start - timedelta(days=1)
+    return [
+        _preset("All time"),
+        _preset("This month", this_start.isoformat(), today.isoformat()),
+        _preset(
+            "Last month",
+            _month_start(today, 1).isoformat(),
+            last_month_end.isoformat(),
+        ),
+        _preset(
+            "Last 3 months",
+            _month_start(today, 2).isoformat(),
+            today.isoformat(),
+        ),
+    ]
+
+
+def _range_caption(date_from, date_to):
+    """Human-readable description of the active range."""
+    if date_from and date_to:
+        return f"Showing {_format_date(date_from)} – {_format_date(date_to)}"
+    if date_from:
+        return f"Showing from {_format_date(date_from)}"
+    if date_to:
+        return f"Showing up to {_format_date(date_to)}"
+    return "Showing all time"
+
+
+def _build_filter(parsed, today):
+    """Template context for the date filter bar."""
+    date_from, date_to = parsed["date_from"], parsed["date_to"]
+    presets = _date_presets(today)
+    active_preset = next(
+        (
+            p["label"]
+            for p in presets
+            if (p["from"], p["to"]) == (date_from, date_to)
+        ),
+        None,
+    )
+    return {
+        "date_from": date_from,
+        "date_to": date_to,
+        "error": parsed["error"],
+        "active": bool(date_from or date_to),
+        "presets": presets,
+        "active_preset": active_preset,
+        "caption": _range_caption(date_from, date_to),
+    }
+
+
+def _build_transactions(user_id, *, date_from=None, date_to=None):
     """-> [{'date': 'DD Mon YYYY', 'description': str, 'category': str, 'amount': float}]"""
+    rows = get_recent_expenses(user_id, date_from=date_from, date_to=date_to)
     return [
         {
             "date": _format_date(row["date"]),
@@ -75,16 +167,16 @@ def _build_transactions(user_id):
             "category": row["category"],
             "amount": float(row["amount"]),
         }
-        for row in get_recent_expenses(user_id)
+        for row in rows
     ]
 
 
-def _build_stats(user_id, categories):
+def _build_stats(user_id, categories, *, date_from=None, date_to=None):
     """-> {'total_spent': float, 'transaction_count': int, 'top_category': str | None}
 
     ``categories`` is _build_categories output: sorted by amount DESC, name ASC.
     """
-    summary = get_expense_summary(user_id)
+    summary = get_expense_summary(user_id, date_from=date_from, date_to=date_to)
     return {
         "total_spent": round(summary["total"], 2),
         "transaction_count": summary["count"],
@@ -107,9 +199,11 @@ def _category_pcts(rows):
     ]
 
 
-def _build_categories(user_id):
+def _build_categories(user_id, *, date_from=None, date_to=None):
     """-> [{'name': str, 'amount': float, 'pct': float (1dp)}], [] when no spend."""
-    return _category_pcts(get_category_totals(user_id))
+    return _category_pcts(
+        get_category_totals(user_id, date_from=date_from, date_to=date_to)
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -191,13 +285,16 @@ def profile():
         session.clear()
         return redirect(url_for("login"))
 
-    categories = _build_categories(user_id)
+    parsed = _parse_date_filter(request.args)
+    date_range = {"date_from": parsed["date_from"], "date_to": parsed["date_to"]}
+    categories = _build_categories(user_id, **date_range)
     return render_template(
         "profile.html",
         user=_build_user(row),
-        stats=_build_stats(user_id, categories),
-        transactions=_build_transactions(user_id),
+        stats=_build_stats(user_id, categories, **date_range),
+        transactions=_build_transactions(user_id, **date_range),
         categories=categories,
+        date_filter=_build_filter(parsed, date.today()),
     )
 
 

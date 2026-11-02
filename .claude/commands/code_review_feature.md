@@ -10,7 +10,7 @@ specified in $ARGUMENTS.
 
 If no argument is provided, stop immediately and say:
 "Please provide a spec name. Usage: /code-review-feature 
-<spec-name> e.g. /code-review-feature 03-login"
+<spec-name> e.g. /code-review-feature 03-login-logout"
 
 ## Pre-flight Check
 

@@ -313,3 +313,325 @@ def test_category_pcts_empty_and_zero_total(app):
     category_pcts = importlib.import_module("app")._category_pcts
     assert category_pcts([]) == []
     assert category_pcts([("Food", 0.0)]) == []
+
+
+# ------------------------------------------------------------------ #
+# Step 6 — date filter                                                #
+# ------------------------------------------------------------------ #
+
+import html as html_lib  # noqa: E402
+import importlib  # noqa: E402
+from datetime import date  # noqa: E402
+
+import pytest  # noqa: E402
+
+from database import db  # noqa: E402
+
+# Year 2020 never overlaps the current-month demo seed.
+EDGE_ROWS = [
+    (1.00, "Food", "2020-01-14", "BeforeEdge"),
+    (10.00, "Food", "2020-01-15", "StartEdge"),
+    (5.50, "Transport", "2020-01-20", "MiddleRow"),
+    (20.25, "Bills", "2020-01-31", "EndEdge"),
+    (100.00, "Health", "2020-02-01", "AfterEdge"),
+]
+JAN = {"from": "2020-01-15", "to": "2020-01-31"}
+TX_COUNT = re.compile(
+    r'profile-stat-label">Transactions</p>\s*<p class="profile-stat-value">(\d+)</p>'
+)
+
+
+def app_module():
+    return importlib.import_module("app")
+
+
+def add_expenses(email, rows):
+    """rows: (amount, category, iso_date, description). Returns user_id."""
+    conn = db.get_db()
+    try:
+        uid = conn.execute(
+            "SELECT id FROM users WHERE email = ?", (email,)
+        ).fetchone()["id"]
+        conn.executemany(
+            "INSERT INTO expenses (user_id, amount, category, date, description) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [(uid, *row) for row in rows],
+        )
+        conn.commit()
+        return uid
+    finally:
+        conn.close()
+
+
+def filtered_html(client, **params):
+    login(client)
+    add_expenses("demo@spendly.com", EDGE_ROWS)
+    res = client.get("/profile", query_string=params)
+    assert res.status_code == 200
+    return res.data.decode()
+
+
+def total(page):
+    return re.search(r'profile-total-spent">₹([\d.]+)<', page).group(1)
+
+
+def tx_count(page):
+    return int(TX_COUNT.search(page).group(1))
+
+
+def presets_by_label(today):
+    return {
+        p["label"]: (p["from"], p["to"])
+        for p in app_module()._date_presets(today)
+    }
+
+
+# --- unit ------------------------------------------------------------ #
+
+def test_parse_date_filter_unit(app):
+    m = app_module()
+    parse = m._parse_date_filter
+    none = {"date_from": None, "date_to": None, "error": None}
+    assert parse({}) == none
+    assert parse({"from": "", "to": ""}) == none
+    assert parse({"from": "2020-01-15"}) == {
+        "date_from": "2020-01-15", "date_to": None, "error": None}
+    assert parse({"to": "2020-01-15"}) == {
+        "date_from": None, "date_to": "2020-01-15", "error": None}
+    assert parse({"from": "2020-01-15", "to": "2020-01-15"})["error"] is None
+    assert parse({"from": " 2020-01-15 "})["date_from"] == "2020-01-15"
+    assert parse({"from": "2020-1-5"})["date_from"] == "2020-01-05"
+    invalid = {"date_from": None, "date_to": None, "error": m.INVALID_DATE_ERROR}
+    assert parse({"from": "bad"}) == invalid
+    assert parse({"to": "2020-02-30"}) == invalid
+    assert parse({"from": "2020-01-15", "to": "nope"}) == invalid
+    assert parse({"from": "2020-01-31", "to": "2020-01-15"}) == {
+        "date_from": None, "date_to": None, "error": m.DATE_ORDER_ERROR}
+
+
+def test_date_presets_jan_rolls_back_year(app):
+    presets = app_module()._date_presets(date(2026, 1, 20))
+    assert [p["label"] for p in presets] == [
+        "All time", "This month", "Last month", "Last 3 months"]
+    by = presets_by_label(date(2026, 1, 20))
+    assert by["All time"] == (None, None)
+    assert by["This month"] == ("2026-01-01", "2026-01-20")
+    assert by["Last month"] == ("2025-12-01", "2025-12-31")
+    assert by["Last 3 months"] == ("2025-11-01", "2026-01-20")
+
+
+def test_date_presets_month_end_and_leap(app):
+    by = presets_by_label(date(2026, 3, 31))
+    assert by["Last month"] == ("2026-02-01", "2026-02-28")
+    assert by["Last 3 months"][0] == "2026-01-01"
+    assert presets_by_label(date(2024, 3, 15))["Last month"][1] == "2024-02-29"
+    assert presets_by_label(date(2026, 2, 1))["Last 3 months"][0] == "2025-12-01"
+
+
+def test_build_filter_active_preset_and_params(app):
+    m = app_module()
+    today = date(2026, 1, 20)
+
+    f = m._build_filter({"date_from": None, "date_to": None, "error": None}, today)
+    assert f["active"] is False
+    assert f["active_preset"] == "All time"
+    assert f["presets"][0]["params"] == {}
+    assert f["presets"][1]["params"] == {"from": "2026-01-01", "to": "2026-01-20"}
+
+    f = m._build_filter(
+        {"date_from": "2026-01-01", "date_to": "2026-01-20", "error": None}, today)
+    assert f["active"] is True
+    assert f["active_preset"] == "This month"
+
+    f = m._build_filter(
+        {"date_from": "2026-01-05", "date_to": None, "error": None}, today)
+    assert f["active"] is True
+    assert f["active_preset"] is None
+
+
+def test_db_helpers_default_unchanged_and_keyword_only(app):
+    assert db.get_expense_summary(1) == db.get_expense_summary(
+        1, date_from=None, date_to=None)
+    summary = db.get_expense_summary(1)
+    assert summary["count"] == 8
+    assert summary["total"] == pytest.approx(222.19)
+    with pytest.raises(TypeError):
+        db.get_recent_expenses(1, 10, "2020-01-01")
+
+
+# --- integration ----------------------------------------------------- #
+
+def test_filter_bar_markup(client):
+    page = profile_html(client)
+    assert 'aria-label="Date filter"' in page
+    for label in ("All time", "This month", "Last month", "Last 3 months"):
+        assert f">{label}</a>" in page
+    assert re.search(r'type="date"[^>]*name="from"', page)
+    assert re.search(r'type="date"[^>]*name="to"', page)
+    assert ">Apply</button>" in page
+    assert 'method="get" action="/profile"' in page
+    assert "profile-filter-clear" not in page
+    assert 'role="alert"' not in page
+
+
+def test_no_params_all_time_active(client):
+    page = profile_html(client)
+    assert total(page) == "222.19"
+    assert tx_count(page) == 8
+    assert "Showing all time" in page
+    assert re.search(
+        r'profile-filter-preset--active" aria-current="true">All time</a>', page)
+    assert page.count('aria-current="true"') == 1
+
+
+def test_inclusive_bounds(client):
+    page = filtered_html(client, **JAN)
+    assert total(page) == "35.75"
+    assert tx_count(page) == 3
+    for desc in ("StartEdge", "MiddleRow", "EndEdge"):
+        assert desc in page
+    for desc in ("BeforeEdge", "AfterEdge", "Groceries"):
+        assert desc not in page
+
+
+def test_only_from(client):
+    page = filtered_html(client, **{"from": "2020-01-31"})
+    assert total(page) == "342.44"
+    assert tx_count(page) == 10
+
+
+def test_only_to(client):
+    page = filtered_html(client, to="2020-01-15")
+    assert total(page) == "11.00"
+    assert tx_count(page) == 2
+
+
+def test_empty_range(client):
+    page = filtered_html(client, **{"from": "2019-01-01", "to": "2019-12-31"})
+    assert total(page) == "0.00"
+    assert tx_count(page) == 0
+    assert 'profile-top-category">—<' in page
+    assert "No transactions in this period." in page
+    assert "No spending in this period." in page
+    assert "No transactions yet." not in page
+    assert "No spending yet." not in page
+
+
+def test_invalid_date_shows_error_all_time(client):
+    m = app_module()
+    page = filtered_html(client, **{"from": "not-a-date"})
+    assert f'role="alert">{m.INVALID_DATE_ERROR}</p>' in page
+    assert total(page) == "358.94"  # all time: 222.19 seed + 136.75 edge rows
+    assert re.search(r'preset--active" aria-current="true">All time</a>', page)
+
+
+def test_reversed_range_error(client):
+    m = app_module()
+    login(client)
+    res = client.get(
+        "/profile", query_string={"from": "2026-10-31", "to": "2026-10-01"})
+    assert res.status_code == 200
+    page = res.data.decode()
+    assert m.DATE_ORDER_ERROR in page
+    assert total(page) == "222.19"
+
+
+def test_empty_strings_are_missing(client):
+    login(client)
+    page = client.get("/profile?from=&to=").data.decode()
+    assert 'role="alert"' not in page
+    assert total(page) == "222.19"
+
+
+def test_inputs_prefilled_and_clear_link(client):
+    page = filtered_html(client, **JAN)
+    assert 'value="2020-01-15"' in page
+    assert 'value="2020-01-31"' in page
+    assert '<a href="/profile" class="btn-ghost profile-filter-clear">' in page
+
+
+def test_caption(client):
+    page = filtered_html(client, **JAN)
+    assert "Showing 15 Jan 2020 – 31 Jan 2020" in page
+    page = client.get("/profile", query_string={"from": "2020-01-15"}).data.decode()
+    assert "Showing from 15 Jan 2020" in page
+    page = client.get("/profile", query_string={"to": "2020-01-31"}).data.decode()
+    assert "Showing up to 31 Jan 2020" in page
+
+
+def test_this_month_preset_link_and_filter(client):
+    page = filtered_html(client)
+    match = re.search(
+        r'<a href="([^"]+)" class="profile-filter-preset[^"]*"[^>]*>This month</a>',
+        page,
+    )
+    href = html_lib.unescape(match.group(1))
+    today = date.today()
+    assert f"from={today.replace(day=1).isoformat()}" in href
+    assert f"to={today.isoformat()}" in href
+    page = client.get(href).data.decode()
+    assert re.search(r'preset--active" aria-current="true">This month</a>', page)
+    assert total(page) == "222.19"
+    assert "StartEdge" not in page
+
+
+def test_custom_range_no_active_preset(client):
+    page = filtered_html(client, **JAN)
+    assert "profile-filter-preset--active" not in page
+    assert 'aria-current="true"' not in page
+
+
+def test_filtered_categories_sum_to_total(client):
+    page = filtered_html(client, **JAN)
+    amounts = re.findall(r'profile-cat-amount">₹([\d.]+)<', page)
+    assert round(sum(float(a) for a in amounts), 2) == 35.75
+    pcts = re.findall(r'profile-cat-pct">([\d.]+)%<', page)
+    assert abs(sum(float(p) for p in pcts) - 100) < 0.5
+
+
+def test_filter_isolated_between_users(client):
+    register_and_login(client, email="other@example.com", name="Other")
+    add_expenses(
+        "other@example.com", [(999.0, "Food", "2020-01-20", "OtherUserSecret")])
+    client.get("/logout")
+    page = filtered_html(client, **JAN)
+    assert "OtherUserSecret" not in page
+    assert total(page) == "35.75"
+    page = client.get(
+        "/profile", query_string={**JAN, "user_id": "2"}).data.decode()
+    assert "OtherUserSecret" not in page
+    assert total(page) == "35.75"
+
+
+def test_logged_out_filter_redirects(client):
+    res = client.get("/profile?from=2020-01-01")
+    assert res.status_code == 302
+    assert res.headers["Location"].endswith("/login")
+
+
+def test_filter_query_values_escaped(client):
+    m = app_module()
+    login(client)
+    res = client.get(
+        "/profile", query_string={"from": '"><script>alert(1)</script>'})
+    assert res.status_code == 200
+    page = res.data.decode()
+    assert "<script>alert(1)" not in page
+    assert m.INVALID_DATE_ERROR in page
+
+
+def test_filter_template_rules():
+    tpl = read("templates", "profile.html")
+    assert tpl.count("url_for('profile'") >= 3
+    assert "/profile?" not in tpl
+    assert "|safe" not in tpl
+    css = read("static", "css", "profile.css")
+    for selector in (
+        ".profile-filter {",
+        ".profile-filter-preset--active",
+        ".profile-filter-error",
+        ".profile-filter-caption",
+    ):
+        assert selector in css
+    mobile = css[css.index("@media (max-width: 600px)"):]
+    assert ".profile-filter-form" in mobile
