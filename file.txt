@@ -76,3 +76,6 @@ Save this plan to .claude/plans/05-backend-routes-profile-page_setup.md
 
 Use this agent to write pytest test cases for Spendly features. 
 Invoke after implementing any feature to generate tests based on the feature spec, not the implementation.
+
+Read .claude/specs/06-date-filter-for-profile-page.md and create a detailed implementation plan for that
+and Save this plan to .claude/plans/06_date-filter-for-profile-page_setup.md

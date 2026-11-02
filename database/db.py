@@ -146,42 +146,56 @@ def get_user_by_id(user_id):
         conn.close()
 
 
-def get_recent_expenses(user_id, limit=10):
-    """Return rows (date, description, category, amount), newest first."""
+def get_recent_expenses(user_id, limit=10, *, date_from=None, date_to=None):
+    """Return rows (date, description, category, amount), newest first.
+
+    ``date_from`` / ``date_to`` are inclusive 'YYYY-MM-DD' bounds; None = no bound.
+    """
     conn = get_db()
     try:
         return conn.execute(
             "SELECT date, description, category, amount FROM expenses "
-            "WHERE user_id = ? ORDER BY date DESC, id DESC LIMIT ?",
-            (user_id, limit),
+            "WHERE user_id = ? "
+            "AND (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?) "
+            "ORDER BY date DESC, id DESC LIMIT ?",
+            (user_id, date_from, date_from, date_to, date_to, limit),
         ).fetchall()
     finally:
         conn.close()
 
 
-def get_expense_summary(user_id):
-    """Return {'total': float, 'count': int} from one SUM/COUNT query."""
+def get_expense_summary(user_id, *, date_from=None, date_to=None):
+    """Return {'total': float, 'count': int} from one SUM/COUNT query.
+
+    ``date_from`` / ``date_to`` are inclusive 'YYYY-MM-DD' bounds; None = no bound.
+    """
     conn = get_db()
     try:
         row = conn.execute(
             "SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count "
-            "FROM expenses WHERE user_id = ?",
-            (user_id,),
+            "FROM expenses WHERE user_id = ? "
+            "AND (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?)",
+            (user_id, date_from, date_from, date_to, date_to),
         ).fetchone()
         return {"total": float(row["total"]), "count": int(row["count"])}
     finally:
         conn.close()
 
 
-def get_category_totals(user_id):
-    """Return rows (category, amount), ordered by amount DESC, category ASC."""
+def get_category_totals(user_id, *, date_from=None, date_to=None):
+    """Return rows (category, amount), ordered by amount DESC, category ASC.
+
+    ``date_from`` / ``date_to`` are inclusive 'YYYY-MM-DD' bounds; None = no bound.
+    """
     conn = get_db()
     try:
         return conn.execute(
             "SELECT category, SUM(amount) AS amount FROM expenses "
-            "WHERE user_id = ? GROUP BY category "
+            "WHERE user_id = ? "
+            "AND (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?) "
+            "GROUP BY category "
             "ORDER BY amount DESC, category ASC",
-            (user_id,),
+            (user_id, date_from, date_from, date_to, date_to),
         ).fetchall()
     finally:
         conn.close()
