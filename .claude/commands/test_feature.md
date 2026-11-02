@@ -1,5 +1,5 @@
 ---
-description: Writes and runs tests for a specific Spendly feature. Pass the spec name as argument e.g. /test-feature 05-backend-connection
+description: Writes and runs tests for a specific Spendly feature. Pass the spec name as argument e.g. /test-feature 05-backend-routes-profile-page
 allowed-tools: Bash(python -m pytest)
 ---
 
@@ -8,7 +8,7 @@ in $ARGUMENTS.
 
 If no argument is provided, stop immediately and say:
 "Please provide a spec name. Usage: /test-feature 
-<spec-name> e.g. /test-feature 05-backend-connection"
+<spec-name> e.g. /test-feature 05-backend-routes-profile-page"
 
 If `.claude/specs/$ARGUMENTS.md` does not exist, stop 
 immediately and say:
