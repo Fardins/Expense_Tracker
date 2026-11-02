@@ -203,18 +203,18 @@ Stop the app, delete `expense_tracker.db`, and start the app again. A fresh data
 
 ## Routes
 
-| Method | Path                    | Description             | Status      |
-| ------ | ----------------------- | ----------------------- | ----------- |
-| GET    | `/`                     | Landing page            | Done        |
-| GET    | `/register`             | Registration page       | UI only     |
-| GET    | `/login`                | Login page              | UI only     |
-| GET    | `/terms`                | Terms and Conditions    | Done        |
-| GET    | `/privacy`              | Privacy Policy          | Done        |
-| GET    | `/logout`               | Log out                 | Placeholder |
-| GET    | `/profile`              | User profile            | Placeholder |
-| GET    | `/expenses/add`         | Add an expense          | Placeholder |
-| GET    | `/expenses/<id>/edit`   | Edit an expense         | Placeholder |
-| GET    | `/expenses/<id>/delete` | Delete an expense       | Placeholder |
+| Method   | Path                    | Description             | Status      |
+| -------- | ----------------------- | ----------------------- | ----------- |
+| GET      | `/`                     | Landing page            | Done        |
+| GET      | `/register`             | Registration page       | UI only     |
+| GET      | `/login`                | Login page              | UI only     |
+| GET      | `/terms`                | Terms and Conditions    | Done        |
+| GET      | `/privacy`              | Privacy Policy          | Done        |
+| GET      | `/logout`               | Log out                 | Placeholder |
+| GET      | `/profile`              | User profile            | Placeholder |
+| GET/POST | `/expenses/add`         | Add an expense          | Implemented |
+| GET      | `/expenses/<id>/edit`   | Edit an expense         | Placeholder |
+| GET      | `/expenses/<id>/delete` | Delete an expense       | Placeholder |
 
 ---
 

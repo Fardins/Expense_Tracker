@@ -98,7 +98,7 @@ pytest -s
 | `GET/POST /login` | Implemented — Step 3 (session login) |
 | `GET /logout` | Implemented — Step 3 (clears session) |
 | `GET /profile` | Implemented — Step 5 (real DB data, login required); Step 6 adds `?from=&to=` date filter (inclusive, YYYY-MM-DD) |
-| `GET /expenses/add` | Stub — Step 7 |
+| `GET/POST /expenses/add` | Implemented — Step 7 (login required) |
 | `GET /expenses/<id>/edit` | Stub — Step 8 |
 | `GET /expenses/<id>/delete` | Stub — Step 9 |
 
