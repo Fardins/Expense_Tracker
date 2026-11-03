@@ -76,6 +76,7 @@
                                 <th>Description</th>
                                 <th>Category</th>
                                 <th class="profile-num">Amount</th>
+                                <th class="profile-edit-col"><span class="sr-only">Actions</span></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -85,6 +86,7 @@
                                 <td>{{ t.description }}</td>
                                 <td><span class="profile-pill profile-cat--{{ t.category|lower }}">{{ t.category }}</span></td>
                                 <td class="profile-num profile-amount">₹{{ "%.2f"|format(t.amount) }}</td>
+                                <td class="profile-edit-col"><a href="{{ url_for('edit_expense', expense_id=t.id) }}" class="profile-edit-link" aria-label="Edit {{ t.description or t.category }} on {{ t.date }}"><i data-lucide="pencil" aria-hidden="true"></i> Edit</a></td>
                             </tr>
                             {% endfor %}
                         </tbody>

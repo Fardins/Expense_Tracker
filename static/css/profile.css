@@ -181,6 +181,52 @@
     padding: 2rem;
 }
 
+.profile-table .profile-edit-col {
+    width: 1%;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.profile-edit-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.5rem;
+    color: var(--accent);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s;
+}
+
+.profile-edit-link svg,
+.profile-edit-link i {
+    width: 14px;
+    height: 14px;
+}
+
+.profile-edit-link:hover { background: var(--accent-light); }
+
+.profile-edit-link:focus-visible {
+    background: var(--accent-light);
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* Visually hidden, still read by screen readers. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* ------------------------------------------------------------------ */
 /* Category colours                                                    */
 /* ------------------------------------------------------------------ */
@@ -439,4 +485,6 @@
         flex: 1;
         text-align: center;
     }
+
+    .profile-table .profile-edit-col { padding-left: 0.25rem; padding-right: 0.25rem; }
 }
