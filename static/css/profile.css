@@ -214,6 +214,35 @@
     outline-offset: 1px;
 }
 
+.profile-delete-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.5rem;
+    color: var(--danger);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s;
+}
+
+.profile-delete-link svg,
+.profile-delete-link i {
+    width: 14px;
+    height: 14px;
+}
+
+.profile-delete-link:hover { background: var(--danger-light); }
+
+.profile-delete-link:focus-visible {
+    background: var(--danger-light);
+    outline: 2px solid var(--danger);
+    outline-offset: 1px;
+}
+
+.profile-table .profile-edit-col a + a { margin-left: 0.25rem; }
+
 /* Visually hidden, still read by screen readers. */
 .sr-only {
     position: absolute;
@@ -487,4 +516,7 @@
     }
 
     .profile-table .profile-edit-col { padding-left: 0.25rem; padding-right: 0.25rem; }
+
+    .profile-edit-link,
+    .profile-delete-link { padding: 0.25rem 0.35rem; }
 }

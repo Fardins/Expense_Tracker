@@ -12,6 +12,7 @@ from database.db import (
     CATEGORIES,
     create_expense,
     create_user,
+    delete_expense_row,
     get_category_totals,
     get_db,
     get_expense_by_id,
@@ -29,8 +30,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or "dev-only-insecure-secret-change-me"
 app.config.update(
     # Cross-site POSTs don't carry the session cookie (CSRF mitigation). The
-    # edit form also carries a per-session token (_csrf_token); the add form
-    # gets one in a follow-up.
+    # edit and delete forms also carry a per-session token (_csrf_token); the
+    # add form gets one in a follow-up.
     SESSION_COOKIE_SAMESITE="Lax",
     # Forms here are tiny; reject oversized bodies before they are parsed.
     MAX_CONTENT_LENGTH=16 * 1024,
@@ -248,6 +249,26 @@ def _render_edit_expense(expense_id, form_values, today, error=None):
         categories=CATEGORIES,
         today=today.isoformat(),
         error=error,
+        csrf_token=_csrf_token(),
+    )
+
+
+def _expense_summary(row):
+    """Expense DB row -> display values for the delete confirmation page."""
+    return {
+        "date": _format_date(row["date"]),
+        "description": row["description"] or row["category"],
+        "category": row["category"],
+        "amount": float(row["amount"]),
+    }
+
+
+def _render_delete_expense(expense_id, expense):
+    """Render the delete confirmation page for one expense row."""
+    return render_template(
+        "delete_expense.html",
+        expense_id=expense_id,
+        expense=_expense_summary(expense),
         csrf_token=_csrf_token(),
     )
 
@@ -485,7 +506,7 @@ def privacy():
 
 
 # ------------------------------------------------------------------ #
-# Placeholder routes — students will implement these                  #
+# Expense edit / delete routes (owner only)                           #
 # ------------------------------------------------------------------ #
 
 
@@ -514,9 +535,24 @@ def edit_expense(expense_id):
     return redirect(url_for("profile"))
 
 
-@app.route("/expenses/<int:id>/delete")
-def delete_expense(id):
-    return "Delete expense — coming in Step 9"
+@app.route("/expenses/<int:expense_id>/delete", methods=["GET", "POST"])
+def delete_expense(expense_id):
+    user = _session_user()
+    if user is None:
+        return redirect(url_for("login"))
+    # Scoped to the session user: someone else's id looks like a missing one.
+    expense = get_expense_by_id(expense_id, user["id"])
+    if expense is None:
+        abort(404)
+
+    if request.method == "GET":  # GET only confirms; it never deletes
+        return _render_delete_expense(expense_id, expense)
+
+    if not _csrf_valid(request.form):
+        abort(400)
+    if not delete_expense_row(expense_id, user["id"]):
+        abort(404)  # already deleted (double submit / another tab)
+    return redirect(url_for("profile"))
 
 
 if __name__ == "__main__":
