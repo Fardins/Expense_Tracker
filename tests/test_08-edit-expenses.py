@@ -1074,11 +1074,6 @@ class TestStaticHygiene:
                 r"#[0-9a-fA-F]{3,8}\b", m.group(1)
             ), "Hex colours are forbidden"
 
-    def test_delete_route_is_still_a_stub(self, demo_client, app):
-        response = demo_client.get(_url(app, "delete_expense", id=1))
-        assert response.status_code == 200
-        assert "Delete expense — coming in Step 9" in _text(response)
-
     def test_edit_route_registered_for_get_and_post_on_expense_id(self, app):
         rules = [r for r in app.url_map.iter_rules() if r.endpoint == "edit_expense"]
         assert rules, "edit_expense endpoint missing"

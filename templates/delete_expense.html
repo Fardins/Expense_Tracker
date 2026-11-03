@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Delete expense — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/expense.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="expense">
+    <div class="expense-container">
+
+        <header class="expense-header">
+            <h1 class="expense-title">Delete expense</h1>
+            <p class="expense-subtitle">This permanently removes the expense. This can't be undone.</p>
+        </header>
+
+        <form class="expense-card expense-confirm" method="POST" action="{{ url_for('delete_expense', expense_id=expense_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <dl class="expense-summary">
+                <div class="expense-summary-row">
+                    <dt>Date</dt>
+                    <dd>{{ expense.date }}</dd>
+                </div>
+                <div class="expense-summary-row">
+                    <dt>Description</dt>
+                    <dd>{{ expense.description }}</dd>
+                </div>
+                <div class="expense-summary-row">
+                    <dt>Category</dt>
+                    <dd>{{ expense.category }}</dd>
+                </div>
+                <div class="expense-summary-row">
+                    <dt>Amount</dt>
+                    <dd class="expense-summary-amount">₹{{ "%.2f"|format(expense.amount) }}</dd>
+                </div>
+            </dl>
+
+            <div class="expense-actions">
+                <a href="{{ url_for('profile') }}" class="btn-ghost">Cancel</a>
+                <button type="submit" class="btn-danger">Delete expense</button>
+            </div>
+        </form>
+
+    </div>
+</section>
+
+{% endblock %}

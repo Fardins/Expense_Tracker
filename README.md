@@ -214,7 +214,7 @@ Stop the app, delete `expense_tracker.db`, and start the app again. A fresh data
 | GET      | `/profile`              | User profile            | Placeholder |
 | GET/POST | `/expenses/add`         | Add an expense          | Implemented |
 | GET/POST | `/expenses/<id>/edit`   | Edit an expense         | Implemented |
-| GET      | `/expenses/<id>/delete` | Delete an expense       | Placeholder |
+| GET/POST | `/expenses/<id>/delete` | Delete an expense       | Implemented |
 
 ---
 
