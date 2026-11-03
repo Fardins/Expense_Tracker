@@ -90,3 +90,6 @@ merge it using squash merge, switch to main, pull latest, and delete the feature
  Read @.claude/specs/08-edit-expenses.md then generate an implementation plan.
   Save this plan to @.claude/plans/08_edit_expenses_setup.md first. then i check it
   and after check i give next instruction
+
+Read @.claude/specs/09-delete-expenses.md then generate an implementation plan.
+Save this plan to @.claude/plans/09_delete_expenses_setup.md first.
