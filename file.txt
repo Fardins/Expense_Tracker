@@ -86,3 +86,7 @@ Save this plan to @.claude/plans/07_add_new_expenses_setup.md
 Commit all changes with an appropriate conventional commit message, push to the current feature branch, 
 create a pull request into main with a proper title and description based on the spec, 
 merge it using squash merge, switch to main, pull latest, and delete the feature branch locally.
+
+ Read @.claude/specs/08-edit-expenses.md then generate an implementation plan.
+  Save this plan to @.claude/plans/08_edit_expenses_setup.md first. then i check it
+  and after check i give next instruction

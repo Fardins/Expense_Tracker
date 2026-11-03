@@ -106,9 +106,7 @@ def get_user_by_email(email):
     """Return the users row for ``email`` as a sqlite3.Row, or None."""
     conn = get_db()
     try:
-        return conn.execute(
-            "SELECT * FROM users WHERE email = ?", (email,)
-        ).fetchone()
+        return conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
     finally:
         conn.close()
 
@@ -146,6 +144,39 @@ def create_expense(user_id, amount, category, date, description=None):
         conn.close()
 
 
+def get_expense_by_id(expense_id, user_id):
+    """Return (id, amount, category, date, description) if the expense belongs
+    to ``user_id``, else None. Ownership is enforced in the WHERE clause.
+    """
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT id, amount, category, date, description FROM expenses "
+            "WHERE id = ? AND user_id = ?",
+            (expense_id, user_id),
+        ).fetchone()
+    finally:
+        conn.close()
+
+
+def update_expense(expense_id, user_id, amount, category, date, description=None):
+    """Update one expense owned by ``user_id``. Return True if a row matched.
+
+    Never touches ``user_id`` or ``created_at``.
+    """
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "UPDATE expenses SET amount = ?, category = ?, date = ?, description = ? "
+            "WHERE id = ? AND user_id = ?",
+            (amount, category, date, description, expense_id, user_id),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
 def get_user_by_id(user_id):
     """Return id, name, email, created_at for ``user_id``, or None.
 
@@ -162,14 +193,14 @@ def get_user_by_id(user_id):
 
 
 def get_recent_expenses(user_id, limit=10, *, date_from=None, date_to=None):
-    """Return rows (date, description, category, amount), newest first.
+    """Return rows (date, description, category, amount, id), newest first.
 
     ``date_from`` / ``date_to`` are inclusive 'YYYY-MM-DD' bounds; None = no bound.
     """
     conn = get_db()
     try:
         return conn.execute(
-            "SELECT date, description, category, amount FROM expenses "
+            "SELECT date, description, category, amount, id FROM expenses "
             "WHERE user_id = ? "
             "AND (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?) "
             "ORDER BY date DESC, id DESC LIMIT ?",

@@ -99,7 +99,7 @@ pytest -s
 | `GET /logout` | Implemented — Step 3 (clears session) |
 | `GET /profile` | Implemented — Step 5 (real DB data, login required); Step 6 adds `?from=&to=` date filter (inclusive, YYYY-MM-DD) |
 | `GET/POST /expenses/add` | Implemented — Step 7 (login required) |
-| `GET /expenses/<id>/edit` | Stub — Step 8 |
+| `GET/POST /expenses/<id>/edit` | Implemented — Step 8 (login required, owner only) |
 | `GET /expenses/<id>/delete` | Stub — Step 9 |
 
 **Do not implement a stub route unless the active task explicitly targets that step.**

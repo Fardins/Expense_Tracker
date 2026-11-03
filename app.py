@@ -1,9 +1,11 @@
+import hmac
 import math
 import os
+import secrets
 import sqlite3
 from datetime import date, datetime, timedelta
 
-from flask import Flask, redirect, render_template, request, session, url_for
+from flask import Flask, abort, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
 from database.db import (
@@ -12,20 +14,23 @@ from database.db import (
     create_user,
     get_category_totals,
     get_db,
+    get_expense_by_id,
     get_expense_summary,
     get_recent_expenses,
     get_user_by_email,
     get_user_by_id,
     init_db,
     seed_db,
+    update_expense,
 )
 
 app = Flask(__name__)
 # Dev-only fallback — set SECRET_KEY in the environment for any real deployment.
 app.secret_key = os.environ.get("SECRET_KEY") or "dev-only-insecure-secret-change-me"
 app.config.update(
-    # Cross-site POSTs don't carry the session cookie (CSRF mitigation; a
-    # per-form token is planned before the edit/delete steps).
+    # Cross-site POSTs don't carry the session cookie (CSRF mitigation). The
+    # edit form also carries a per-session token (_csrf_token); the add form
+    # gets one in a follow-up.
     SESSION_COOKIE_SAMESITE="Lax",
     # Forms here are tiny; reject oversized bodies before they are parsed.
     MAX_CONTENT_LENGTH=16 * 1024,
@@ -59,7 +64,7 @@ def _registration_error(name, email, password):
     if not name or not email or not password:
         return "All fields are required."
     at = email.find("@")
-    if at == -1 or "." not in email[at + 1:]:
+    if at == -1 or "." not in email[at + 1 :]:
         return "Please enter a valid email address."
     if len(password) < 8:
         return "Password must be at least 8 characters."
@@ -206,6 +211,47 @@ def _render_add_expense(form_values, today, error=None):
     )
 
 
+def _expense_row_values(row):
+    """Expense DB row -> form_values for pre-filling the edit form."""
+    return {
+        "amount": f"{row['amount']:.2f}",
+        "category": row["category"],
+        "date": row["date"],
+        "description": row["description"] or "",
+    }
+
+
+def _csrf_token():
+    """The session's CSRF token, minted on first use."""
+    token = session.get("csrf_token")
+    if not token:
+        token = session["csrf_token"] = secrets.token_urlsafe(32)
+    return token
+
+
+def _csrf_valid(form):
+    """True if the submitted token matches the session token.
+
+    Compared as bytes so non-ASCII input can't make compare_digest raise.
+    """
+    expected = session.get("csrf_token", "")
+    submitted = form.get("csrf_token", "")
+    return bool(expected) and hmac.compare_digest(submitted.encode(), expected.encode())
+
+
+def _render_edit_expense(expense_id, form_values, today, error=None):
+    """Render the edit-expense form with the given values and optional error."""
+    return render_template(
+        "edit_expense.html",
+        expense_id=expense_id,
+        form_values=form_values,
+        categories=CATEGORIES,
+        today=today.isoformat(),
+        error=error,
+        csrf_token=_csrf_token(),
+    )
+
+
 def _month_start(today, months_back):
     """1st of the month ``months_back`` months before ``today``'s month."""
     year, month0 = divmod(today.year * 12 + today.month - 1 - months_back, 12)
@@ -254,11 +300,7 @@ def _build_filter(parsed, today):
     date_from, date_to = parsed["date_from"], parsed["date_to"]
     presets = _date_presets(today)
     active_preset = next(
-        (
-            p["label"]
-            for p in presets
-            if (p["from"], p["to"]) == (date_from, date_to)
-        ),
+        (p["label"] for p in presets if (p["from"], p["to"]) == (date_from, date_to)),
         None,
     )
     return {
@@ -273,10 +315,11 @@ def _build_filter(parsed, today):
 
 
 def _build_transactions(user_id, *, date_from=None, date_to=None):
-    """-> [{'date': 'DD Mon YYYY', 'description': str, 'category': str, 'amount': float}]"""
+    """-> [{'id', 'date': 'DD Mon YYYY', 'description', 'category', 'amount': float}]"""
     rows = get_recent_expenses(user_id, date_from=date_from, date_to=date_to)
     return [
         {
+            "id": row["id"],
             "date": _format_date(row["date"]),
             "description": row["description"] or "",
             "category": row["category"],
@@ -325,6 +368,7 @@ def _build_categories(user_id, *, date_from=None, date_to=None):
 # Routes                                                              #
 # ------------------------------------------------------------------ #
 
+
 @app.route("/")
 def landing():
     return render_template("landing.html")
@@ -350,9 +394,10 @@ def register():
             error, status = DUPLICATE_EMAIL_ERROR, 409
 
     if error is not None:
-        return render_template(
-            "register.html", error=error, name=name, email=email
-        ), status
+        return (
+            render_template("register.html", error=error, name=name, email=email),
+            status,
+        )
     return redirect(url_for("login"))
 
 
@@ -367,15 +412,17 @@ def login():
     password = request.form.get("password", "")  # never strip passwords
 
     if not email or not password:
-        return render_template(
-            "login.html", error=LOGIN_REQUIRED_ERROR, email=email
-        ), 400
+        return (
+            render_template("login.html", error=LOGIN_REQUIRED_ERROR, email=email),
+            400,
+        )
 
     user = get_user_by_email(email)
     if user is None or not check_password_hash(user["password_hash"], password):
-        return render_template(
-            "login.html", error=INVALID_LOGIN_ERROR, email=email
-        ), 401
+        return (
+            render_template("login.html", error=INVALID_LOGIN_ERROR, email=email),
+            401,
+        )
 
     session.clear()  # drop any pre-login session data (fixation guard)
     session["user_id"] = user["id"]
@@ -441,9 +488,30 @@ def privacy():
 # Placeholder routes — students will implement these                  #
 # ------------------------------------------------------------------ #
 
-@app.route("/expenses/<int:id>/edit")
-def edit_expense(id):
-    return "Edit expense — coming in Step 8"
+
+@app.route("/expenses/<int:expense_id>/edit", methods=["GET", "POST"])
+def edit_expense(expense_id):
+    user = _session_user()
+    if user is None:
+        return redirect(url_for("login"))
+    # Scoped to the session user: someone else's id looks like a missing one.
+    expense = get_expense_by_id(expense_id, user["id"])
+    if expense is None:
+        abort(404)
+
+    today = date.today()
+    if request.method == "GET":
+        return _render_edit_expense(expense_id, _expense_row_values(expense), today)
+
+    if not _csrf_valid(request.form):
+        abort(400)
+    values, error = _parse_expense_form(request.form, today)
+    if error:
+        form_values = _expense_form_values(request.form)
+        return _render_edit_expense(expense_id, form_values, today, error), 400
+    if not update_expense(expense_id, user["id"], **values):
+        abort(404)  # removed between lookup and save
+    return redirect(url_for("profile"))
 
 
 @app.route("/expenses/<int:id>/delete")
